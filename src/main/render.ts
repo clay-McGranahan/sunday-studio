@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { RenderRequest } from '@shared/types'
 import { planRender, progressFromLine } from '@shared/render'
+import { paths } from './paths'
 import { readProject, readTranscript } from './store'
 import { requireFfmpeg, run } from './tools'
 
@@ -26,7 +27,8 @@ export async function renderClip(req: RenderRequest, onProgress: (p: number) => 
       captionStyle: req.captionStyle,
       tracking: req.tracking,
       outputPath: req.outputPath,
-      workDir: work
+      workDir: work,
+      fontsDir: paths.resource('fonts')
     })
     for (const [name, contents] of Object.entries(plan.files)) writeFileSync(join(work, name), contents)
 

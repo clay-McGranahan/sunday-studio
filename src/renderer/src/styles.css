@@ -76,6 +76,23 @@
     0 2px 6px rgba(10, 12, 16, 0.25);
 }
 
+/* Caption fonts: the same files FFmpeg burns into the exported clip. */
+@font-face {
+  font-family: 'Figtree';
+  font-weight: 700;
+  src: url('../../../resources/fonts/Figtree-Bold.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Archivo Black';
+  font-weight: 400;
+  src: url('../../../resources/fonts/ArchivoBlack-Regular.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Literata';
+  font-weight: 400;
+  src: url('../../../resources/fonts/Literata-Regular.ttf') format('truetype');
+}
+
 * {
   box-sizing: border-box;
 }

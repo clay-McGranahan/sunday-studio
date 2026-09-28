@@ -47,6 +47,10 @@
       {
         "from": "resources/bin",
         "to": "bin"
+      },
+      {
+        "from": "resources/fonts",
+        "to": "fonts"
       }
     ],
     "mac": {

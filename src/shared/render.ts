@@ -88,6 +88,8 @@ export interface RenderInput {
   workDir: string
   /** x264 preset: 'veryfast' is ~2.7x faster than 'fast' at a small size cost. */
   preset?: string
+  /** Directory with the bundled caption fonts (resources/fonts). */
+  fontsDir?: string
 }
 
 export interface RenderPlan {
@@ -130,7 +132,7 @@ export function planRender(input: RenderInput): RenderPlan {
     }
     filters.push(`crop=w=${size.width}:h=${size.height}:x=${first.x}:y=${first.y}`)
   }
-  filters.push(`scale=${outW}:${outH}:flags=lanczos`, 'setsar=1', `ass='${filterPath(join('captions.ass'))}'`, 'format=yuv420p')
+  filters.push(`scale=${outW}:${outH}:flags=lanczos`, 'setsar=1', `ass=filename='${filterPath(join('captions.ass'))}'${input.fontsDir ? `:fontsdir='${filterPath(input.fontsDir)}'` : ''}`, 'format=yuv420p')
 
   const args = [
     '-v', 'error', '-y', '-progress', 'pipe:1', '-nostats',

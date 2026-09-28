@@ -81,6 +81,10 @@ export interface CaptionPage {
   end: number
 }
 
+/**
+ * Caption fonts ship with the app (resources/fonts, OFL) so captions render the same on every
+ * platform and on the server; the preview loads the same files via @font-face.
+ */
 export interface CaptionLook {
   label: string
   blurb: string
@@ -105,7 +109,7 @@ export const CAPTION_LOOKS: Record<CaptionStyle, CaptionLook> = {
     blurb: 'Clear and confident',
     maxWords: 6,
     uppercase: false,
-    font: 'Avenir Next',
+    font: 'Figtree',
     weight: 700,
     size: 0.058,
     color: '#FFFFFF',
@@ -120,8 +124,9 @@ export const CAPTION_LOOKS: Record<CaptionStyle, CaptionLook> = {
     blurb: 'Bold and energetic',
     maxWords: 3,
     uppercase: true,
-    font: 'Arial Black',
-    weight: 900,
+    // Archivo Black is already heavy; its only weight is 400.
+    font: 'Archivo Black',
+    weight: 400,
     size: 0.068,
     color: '#FFFFFF',
     activeColor: '#FFE14A',
@@ -135,7 +140,7 @@ export const CAPTION_LOOKS: Record<CaptionStyle, CaptionLook> = {
     blurb: 'Quiet and editorial',
     maxWords: 9,
     uppercase: false,
-    font: 'Georgia',
+    font: 'Literata',
     weight: 400,
     size: 0.036,
     color: '#FFFFFF',
