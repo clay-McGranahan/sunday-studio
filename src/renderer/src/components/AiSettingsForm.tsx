@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { PROVIDER_PRESETS, type AiSettings } from '@shared/types'
-import { api } from '../lib/api'
+import { desktop } from '../lib/api'
 import { useToast } from '../lib/toast'
 import { Spinner } from './Common'
 
@@ -16,7 +16,7 @@ export default function AiSettingsForm({ onSaved }: { onSaved?: (s: AiSettings) 
   const [tested, setTested] = useState<string | null>(null)
 
   useEffect(() => {
-    api.getAi().then((s) => {
+    desktop.getAi().then((s) => {
       setSettings(s)
       setProvider(s.provider)
       setBaseUrl(s.baseUrl)
@@ -34,7 +34,7 @@ export default function AiSettingsForm({ onSaved }: { onSaved?: (s: AiSettings) 
   const save = async () => {
     setSaving(true)
     try {
-      const next = await api.setAi({ provider, baseUrl, model, apiKey: key ? key : undefined })
+      const next = await desktop.setAi({ provider, baseUrl, model, apiKey: key ? key : undefined })
       setSettings(next)
       setKey('')
       onSaved?.(next)
@@ -49,7 +49,7 @@ export default function AiSettingsForm({ onSaved }: { onSaved?: (s: AiSettings) 
     setTested(null)
     try {
       await save()
-      const served = await api.testAi()
+      const served = await desktop.testAi()
       setTested(served)
       toast.show(`Connected to ${served}`, 'success')
     } catch (err) {
@@ -60,7 +60,7 @@ export default function AiSettingsForm({ onSaved }: { onSaved?: (s: AiSettings) 
   }
 
   const removeKey = async () => {
-    const next = await api.setAi({ provider, baseUrl, model, apiKey: '' })
+    const next = await desktop.setAi({ provider, baseUrl, model, apiKey: '' })
     setSettings(next)
     setTested(null)
     onSaved?.(next)

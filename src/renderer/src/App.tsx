@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { SetupStatus } from '@shared/types'
-import { api } from './lib/api'
+import { desktop } from './lib/api'
 import Startup from './views/Startup'
 import Welcome from './views/Welcome'
 import Projects from './views/Projects'
@@ -20,7 +20,7 @@ export default function App() {
   const check = useCallback(async () => {
     setStartupError(null)
     try {
-      setStatus(await api.setupStatus())
+      setStatus(await desktop.setupStatus())
     } catch (err) {
       setStartupError(err instanceof Error ? err.message : String(err))
     }

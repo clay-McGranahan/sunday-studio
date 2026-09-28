@@ -3,7 +3,7 @@ import type { SetupStatus } from '@shared/types'
 import AiSettingsForm from '../components/AiSettingsForm'
 import { Icon, Spinner } from '../components/Common'
 import SetupList from '../components/SetupList'
-import { api } from '../lib/api'
+import { desktop } from '../lib/api'
 
 interface Props {
   onBack: () => void
@@ -14,7 +14,7 @@ export default function Settings({ onBack, onStatusChange }: Props) {
   const [status, setStatus] = useState<SetupStatus | null>(null)
 
   const refresh = useCallback(async () => {
-    const s = await api.setupStatus()
+    const s = await desktop.setupStatus()
     setStatus(s)
     onStatusChange(s)
   }, [onStatusChange])
@@ -62,7 +62,7 @@ export default function Settings({ onBack, onStatusChange }: Props) {
               </p>
               <div className="row">
                 <code className="path">{status.dataDir}</code>
-                <button className="btn btn-small" onClick={() => void api.openDataFolder()}>
+                <button className="btn btn-small" onClick={() => void desktop.openDataFolder()}>
                   <Icon name="folder" size={15} /> Open
                 </button>
               </div>

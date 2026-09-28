@@ -8,7 +8,7 @@ import FramedPlayer from '../components/FramedPlayer'
 import PreviewPlayer from '../components/PreviewPlayer'
 import { ClipLibrary, SuggestionsPanel } from '../components/Suggestions'
 import TranscriptView from '../components/TranscriptView'
-import { api, videoUrl } from '../lib/api'
+import { api, type RenderResult } from '../lib/api'
 import { useToast } from '../lib/toast'
 
 type Step = 1 | 2 | 3 | 4
@@ -83,7 +83,7 @@ export default function Editor({ projectId, onExit, onSettings }: Props) {
       toast.error(err)
       exitRef.current()
     })
-    api.getAi().then((s) => setAiConfigured(s.configured), () => {})
+    api.aiAvailable().then(setAiConfigured, () => {})
   }, [load, toast])
 
   useEffect(
@@ -270,7 +270,7 @@ export default function Editor({ projectId, onExit, onSettings }: Props) {
             />
           </section>
           <aside className="side-col side-col-pinned">
-            <PreviewPlayer src={videoUrl(project.id)} bounds={bounds} seek={seek} onTime={onTime} />
+            <PreviewPlayer src={api.videoUrl(project.id)} bounds={bounds} seek={seek} onTime={onTime} />
             <div className="panel selection-panel">
               {selection && bounds ? (
                 <>
@@ -469,7 +469,7 @@ function FrameStep({
       <section className="stage" ref={stageRef}>
         {stage.height > 0 && (
           <FramedPlayer
-            src={videoUrl(project.id)}
+            src={api.videoUrl(project.id)}
             srcWidth={project.width}
             srcHeight={project.height}
             clip={bounds}
@@ -575,7 +575,7 @@ function ExportStep({
   const [stageRef, stage] = useSize<HTMLDivElement>()
   const [rendering, setRendering] = useState(false)
   const [progress, setProgress] = useState(0)
-  const [output, setOutput] = useState<string | null>(null)
+  const [output, setOutput] = useState<RenderResult | null>(null)
   const trackValid = project.tracking && project.tracking.start <= bounds.start + 0.5 && project.tracking.end >= bounds.end - 0.5
 
   useEffect(() => api.onProgress((e) => e.kind === 'render' && setProgress(e.progress)), [])
@@ -586,7 +586,7 @@ function ExportStep({
     setProgress(0)
     try {
       await beforeRender()
-      const path = await api.render(
+      const result = await api.render(
         {
           projectId: project.id,
           startWord: selection.startWord,
@@ -597,9 +597,9 @@ function ExportStep({
         },
         title
       )
-      if (path) {
-        setOutput(path)
-        toast.show('Clip rendered and downloaded', 'success', { label: 'Show in Finder', run: () => void api.reveal(path) })
+      if (result) {
+        setOutput(result)
+        toast.show('Clip rendered and saved', 'success', { label: api.resultActionLabel, run: () => api.openResult(result) })
       }
     } catch (err) {
       toast.error(err)
@@ -613,7 +613,7 @@ function ExportStep({
       <section className="stage" ref={stageRef}>
         {stage.height > 0 && (
           <FramedPlayer
-            src={videoUrl(project.id)}
+            src={api.videoUrl(project.id)}
             srcWidth={project.width}
             srcHeight={project.height}
             clip={bounds}
@@ -675,11 +675,11 @@ function ExportStep({
           {output && !rendering && (
             <div className="result">
               <Icon name="check" />
-              <span className="small grow" title={output}>
-                Saved {output.split('/').pop()}
+              <span className="small grow" title={output.path ?? output.name}>
+                Saved {output.name}
               </span>
-              <button className="btn btn-small" onClick={() => void api.reveal(output)}>
-                Show in Finder
+              <button className="btn btn-small" onClick={() => api.openResult(output)}>
+                {api.resultActionLabel}
               </button>
             </div>
           )}

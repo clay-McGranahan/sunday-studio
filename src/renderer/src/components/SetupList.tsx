@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { SetupItemId, SetupStatus } from '@shared/types'
-import { api } from '../lib/api'
+import { desktop } from '../lib/api'
 import { useToast } from '../lib/toast'
 import { Icon, ProgressBar } from './Common'
 
@@ -17,7 +17,7 @@ export default function SetupList({ status, onRefresh }: Props) {
 
   useEffect(
     () =>
-      api.onProgress((e) => {
+      desktop.onProgress((e) => {
         if (e.kind !== 'setup') return
         setMessage(e.message)
         setProgress(e.progress)
@@ -30,7 +30,7 @@ export default function SetupList({ status, onRefresh }: Props) {
     setMessage('Starting…')
     setProgress(undefined)
     try {
-      await api.install(id)
+      await desktop.install(id)
       toast.show('Installed', 'success')
     } catch (err) {
       toast.error(err)
@@ -48,7 +48,7 @@ export default function SetupList({ status, onRefresh }: Props) {
       setMessage('Starting…')
       setProgress(undefined)
       try {
-        await api.install(item.id)
+        await desktop.install(item.id)
         await onRefresh()
       } catch (err) {
         toast.error(err)

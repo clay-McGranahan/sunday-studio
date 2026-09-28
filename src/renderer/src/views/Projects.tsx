@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import type { Project } from '@shared/types'
 import { formatBytes, formatDuration } from '@shared/transcript'
 import { Brand, Icon, ProgressBar, Spinner } from '../components/Common'
-import { api, thumbUrl } from '../lib/api'
+import { api, type VideoSource } from '../lib/api'
+import type { ProjectRow } from '../lib/backend'
 import { useToast } from '../lib/toast'
 
-type Row = Project & { processing: boolean }
+type Row = ProjectRow
 
 interface Props {
   aiConfigured: boolean
@@ -27,6 +28,7 @@ export default function Projects({ aiConfigured, onOpen, onSettings }: Props) {
   const [live, setLive] = useState<Record<string, { progress?: number; message?: string }>>({})
   const [dragging, setDragging] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [upload, setUpload] = useState<number | null>(null)
   const dragDepth = useRef(0)
 
   const refresh = useCallback(() => api.listProjects().then(setProjects, toast.error), [toast.error])
@@ -45,22 +47,25 @@ export default function Projects({ aiConfigured, onOpen, onSettings }: Props) {
     })
   }, [refresh, toast])
 
-  const importVideo = async (path: string) => {
+  const importVideo = async (source: VideoSource) => {
     setImporting(true)
+    setUpload(source.kind === 'file' ? 0 : null)
     try {
-      const project = await api.createProject(path)
+      const project = await api.createProject(source, setUpload)
       toast.show(`Added “${project.name}”. Transcribing now.`, 'success')
       onOpen(project.id)
     } catch (err) {
       toast.error(err)
     } finally {
       setImporting(false)
+      setUpload(null)
     }
   }
 
   const choose = async () => {
-    const path = await api.pickVideo().catch(toast.error)
-    if (path) await importVideo(path)
+    if (importing) return
+    const source = await api.chooseVideo().catch(toast.error)
+    if (source) await importVideo(source)
   }
 
   const onDrop = (e: DragEvent) => {
@@ -68,7 +73,7 @@ export default function Projects({ aiConfigured, onOpen, onSettings }: Props) {
     dragDepth.current = 0
     setDragging(false)
     const file = e.dataTransfer.files[0]
-    if (file) void importVideo(api.pathForFile(file))
+    if (file && !importing) void importVideo(api.sourceFromFile(file))
   }
 
   return (
@@ -98,8 +103,11 @@ export default function Projects({ aiConfigured, onOpen, onSettings }: Props) {
         <section className={`dropzone ${dragging ? 'is-dragging' : ''}`} onClick={choose} role="button" tabIndex={0}>
           {importing ? (
             <>
-              <Spinner />
-              <h2>Reading your video…</h2>
+              <div className="dropzone-icon">
+                <Spinner />
+              </div>
+              <h2>{upload !== null && upload < 1 ? `Uploading your video… ${Math.round(upload * 100)}%` : 'Reading your video…'}</h2>
+              {upload !== null && upload < 1 ? <ProgressBar value={upload} /> : <p className="muted">This takes a few seconds.</p>}
             </>
           ) : (
             <>
@@ -124,7 +132,7 @@ export default function Projects({ aiConfigured, onOpen, onSettings }: Props) {
 
         <div className="section-head">
           <h3>Projects</h3>
-          {projects && <span className="muted small">{projects.length} stored on this Mac</span>}
+          {projects && <span className="muted small">{projects.length} {api.storageLabel}</span>}
         </div>
 
         {!projects ? (
@@ -184,7 +192,7 @@ function ProjectCard({
   return (
     <article className="sermon-row" onClick={() => !renaming && !confirmDelete && onOpen()}>
       <div className="thumb">
-        <img src={thumbUrl(p.id, p.status)} alt="" onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+        <img src={api.thumbUrl(p.id, p.status)} alt="" onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
       </div>
       <div className="sermon-body">
         {renaming ? (
