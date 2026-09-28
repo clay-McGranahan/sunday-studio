@@ -1088,28 +1088,26 @@ input:focus {
 .w:hover {
   background-color: rgba(31, 35, 40, 0.06);
 }
-/* Highlighter ink: a band over the x-height, multiplied into the paper. */
-.w.sel,
-.sel-space {
-  background-image: linear-gradient(176deg, transparent 16%, var(--marker) 19%, var(--marker) 86%, transparent 90%);
+/*
+ * Highlighter ink: one stroke per line over the whole selected run (box-decoration-break gives each
+ * line its own ends). A slight tilt and uneven ends keep it from looking stamped.
+ */
+.sel-run {
+  background-image: linear-gradient(178.6deg, transparent 17%, var(--marker) 21%, var(--marker) 85%, transparent 90%);
   background-repeat: no-repeat;
   background-size: 100% 100%;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  padding: 0 0.14em;
+  margin: 0 -0.14em;
+  border-radius: 0.14em 0.07em 0.18em 0.09em;
   mix-blend-mode: multiply;
-  border-radius: 0;
 }
 .w.sel:hover {
   background-color: transparent;
 }
-.w.sel-first {
-  border-radius: 3px 0 0 4px;
-}
-.w.sel-last {
-  border-radius: 0 4px 3px 0;
-}
-.sweeping .w.sel,
-.sweeping .sel-space {
-  animation: ink 0.16s ease-out both;
-  animation-delay: calc(var(--k, 0) * 9ms);
+.sweeping .sel-run {
+  animation: ink 0.45s ease-out both;
 }
 @keyframes ink {
   from {
@@ -1638,8 +1636,7 @@ input:focus {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sweeping .w.sel,
-  .sweeping .sel-space,
+  .sweeping .sel-run,
   .caption-punch,
   .caption-minimal,
   .progress-indeterminate .progress-fill,

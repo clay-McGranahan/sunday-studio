@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import type { Selection, Word } from '@shared/types'
 import { formatTime, paragraphs } from '@shared/transcript'
 
@@ -157,51 +157,44 @@ interface ParagraphProps {
 }
 
 const Paragraph = memo(function Paragraph({ words, startWord, endWord, selStart, selEnd, active, editing, onSeek, onCommit, onCancel }: ParagraphProps) {
-  const items = []
+  // Words before, inside and after the selection. The selected run is wrapped in one element so the
+  // highlighter reads as one stroke per line instead of a separate dab on every word.
+  const before: ReactNode[] = []
+  const run: ReactNode[] = []
+  const after: ReactNode[] = []
   for (let i = startWord; i <= endWord; i++) {
     const w = words[i]
-    if (i === editing) {
-      items.push(<WordEditor key={i} word={w} onCommit={(t, next) => onCommit(i, t, next)} onCancel={onCancel} />)
-      items.push(' ')
-      continue
-    }
     const selected = selStart >= 0 && i >= selStart && i <= selEnd
-    const cls = ['w']
-    if (selected) cls.push('sel')
-    if (i === selStart) cls.push('sel-first')
-    if (i === selEnd) cls.push('sel-last')
-    if (i === active) cls.push('playing')
-    if (w.original) cls.push('corrected')
-    else if ((w.confidence ?? 1) < 0.45) cls.push('unsure')
-    items.push(
-      <span
-        key={i}
-        className={cls.join(' ')}
-        data-i={i}
-        title={w.original ? `Heard as “${w.original}”` : undefined}
-        style={selected ? ({ '--k': Math.min(i - selStart, 80) } as CSSProperties) : undefined}
-      >
-        {i === selStart && <span className="handle handle-start" data-handle="start" />}
-        {w.text}
-        {i === selEnd && <span className="handle handle-end" data-handle="end" />}
-      </span>
-    )
-    items.push(
-      selected && i !== selEnd ? (
-        <span key={`s${i}`} className="sel-space" style={{ '--k': Math.min(i - selStart, 80) } as CSSProperties}>
-          {' '}
+    const into = selected ? run : selStart >= 0 && i > selEnd ? after : before
+    if (i === editing) {
+      into.push(<WordEditor key={i} word={w} onCommit={(t, next) => onCommit(i, t, next)} onCancel={onCancel} />)
+    } else {
+      const cls = ['w']
+      if (selected) cls.push('sel')
+      if (i === active) cls.push('playing')
+      if (w.original) cls.push('corrected')
+      else if ((w.confidence ?? 1) < 0.45) cls.push('unsure')
+      into.push(
+        <span key={i} className={cls.join(' ')} data-i={i} title={w.original ? `Heard as “${w.original}”` : undefined}>
+          {i === selStart && <span className="handle handle-start" data-handle="start" />}
+          {w.text}
+          {i === selEnd && <span className="handle handle-end" data-handle="end" />}
         </span>
-      ) : (
-        ' '
       )
-    )
+    }
+    // The space after the last selected word belongs outside the stroke.
+    ;(selected && i === selEnd ? after : into).push(' ')
   }
   return (
     <div className="para">
       <button className="para-time" onClick={() => onSeek(words[startWord].start)} title="Jump to this point in the video">
         {formatTime(words[startWord].start)}
       </button>
-      <p>{items}</p>
+      <p>
+        {before}
+        {run.length > 0 && <span className="sel-run">{run}</span>}
+        {after}
+      </p>
     </div>
   )
 })
