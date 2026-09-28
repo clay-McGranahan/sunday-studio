@@ -3,6 +3,7 @@
   "productName": "Sunday Studio",
   "version": "0.1.0",
   "description": "Turn full-length sermon recordings into short, captioned clips for social media.",
+  "license": "MIT",
   "main": "out/main/index.js",
   "private": true,
   "scripts": {

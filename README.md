@@ -51,3 +51,7 @@ The preview (`FramedPlayer`) and the renderer share `src/shared/framing.ts` and 
 ## Platforms
 
 macOS (Apple Silicon) today. Windows and Linux need replacements for the two Apple-only pieces — `parakeet-mlx` (MLX) and the Vision tracker — see DESIGN.md.
+
+## License
+
+MIT, see [LICENSE](LICENSE). The bundled caption fonts (Figtree, Archivo Black, Literata) are under the SIL Open Font License; their license texts are in `resources/fonts/`. The Parakeet model is downloaded at setup from Hugging Face under its own license (CC-BY-4.0).
