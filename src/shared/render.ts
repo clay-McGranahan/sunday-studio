@@ -1,6 +1,6 @@
 import type { Aspect, CaptionOptions, CaptionStyle, Tracking, Word } from './types'
 import { MAX_CLIP_SECONDS } from './types'
-import { captionPages, captionPlacement, captionsEnabled, resolveLook } from './transcript'
+import { captionPages, captionPlacement, captionsEnabled, fitFontSize, resolveLook, type TextMeasurer } from './transcript'
 import { clipBounds, cropAt, cropSize, OUTPUT_SIZE } from './framing'
 
 /** #RRGGBB → ASS &HAABBGGRR */
@@ -21,7 +21,15 @@ function assTime(t: number): string {
 const escapeAss = (text: string) => text.replace(/\\/g, '\\\\').replace(/[{}]/g, '')
 
 /** Word-by-word captions as an ASS subtitle file (burned in by FFmpeg/libass). */
-export function buildAss(words: Word[], clipStart: number, style: CaptionStyle, aspect: Aspect, options?: CaptionOptions): string {
+export function buildAss(
+  words: Word[],
+  clipStart: number,
+  style: CaptionStyle,
+  aspect: Aspect,
+  options?: CaptionOptions,
+  /** When given, pages with a word too wide for the frame are drawn at a smaller size so nothing runs off screen. */
+  measure?: TextMeasurer
+): string {
   const look = resolveLook(style, options)
   const place = captionPlacement(style, aspect, options)
   const { width, height } = OUTPUT_SIZE[aspect]
@@ -31,6 +39,10 @@ export function buildAss(words: Word[], clipStart: number, style: CaptionStyle, 
   const dim = Math.round((1 - look.inactiveOpacity) * 255)
   // Symmetric margins set the wrap width; text stays centered on the position, and never leaves the frame.
   const margin = Math.round(width * (0.5 - place.halfWidth))
+  const outlinePx = look.outline * height
+  const shadowPx = look.shadow * height
+  const spacing = style === 'punch' ? 1 : 0
+  const available = 2 * place.halfWidth * width - 2 * outlinePx
 
   const header = `[Script Info]
 ScriptType: v4.00+
@@ -49,6 +61,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
   const lines: string[] = []
   for (const page of captionPages(words, style)) {
+    const pageSize = measure ? Math.floor(fitFontSize(page.words.map((w) => w.text), look, fontSize, available, measure, spacing)) : fontSize
+    // A shrunk page gets a matching, proportionally thinner outline and shadow.
+    const fit = pageSize < fontSize ? `\\fs${pageSize}\\bord${((outlinePx * pageSize) / fontSize).toFixed(1)}\\shad${((shadowPx * pageSize) / fontSize).toFixed(1)}` : ''
     page.words.forEach((word, i) => {
       const from = i === 0 ? page.start : word.start
       const to = page.words[i + 1]?.start ?? page.end
@@ -64,7 +79,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       const pop = style === 'punch' && i === 0 ? '\\fscx82\\fscy82\\t(0,90,\\fscx100\\fscy100)' : ''
       const fade = style === 'minimal' && i === 0 ? '\\fad(120,0)' : ''
       lines.push(
-        `Dialogue: 0,${assTime(from - clipStart)},${assTime(to - clipStart)},Caption,,0,0,0,,{\\an5\\pos(${posX},${posY})${pop}${fade}}${text}`
+        `Dialogue: 0,${assTime(from - clipStart)},${assTime(to - clipStart)},Caption,,0,0,0,,{\\an5\\pos(${posX},${posY})${fit}${pop}${fade}}${text}`
       )
     })
   }
@@ -86,6 +101,8 @@ export interface RenderInput {
   aspect: Aspect
   captionStyle: CaptionStyle
   captionOptions?: CaptionOptions
+  /** Measures caption text so long words can be scaled to fit; see buildAss. */
+  measure?: TextMeasurer
   tracking?: Tracking
   outputPath: string
   /** A directory the caller owns; the plan's files are written here. */
@@ -113,7 +130,7 @@ export function planRender(input: RenderInput): RenderPlan {
   const join = (name: string) => `${input.workDir.replace(/[\\/]+$/, '')}/${name}`
   const withCaptions = captionsEnabled(input.captionOptions)
   const files: Record<string, string> = {}
-  if (withCaptions) files['captions.ass'] = buildAss(words.slice(startWord, endWord + 1), start, input.captionStyle, aspect, input.captionOptions)
+  if (withCaptions) files['captions.ass'] = buildAss(words.slice(startWord, endWord + 1), start, input.captionStyle, aspect, input.captionOptions, input.measure)
 
   const { width: outW, height: outH } = OUTPUT_SIZE[aspect]
   const size = cropSize(input.sourceWidth, input.sourceHeight, aspect)

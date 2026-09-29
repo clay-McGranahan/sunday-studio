@@ -1,8 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Aspect, CaptionOptions, CaptionStyle, Tracking, Word } from '@shared/types'
 import { cropAt, OUTPUT_SIZE, SAFE_ZONES } from '@shared/framing'
-import { captionPages, captionPlacement, captionsEnabled, formatTime, resolveLook } from '@shared/transcript'
+import { CAPTION_LOOKS, captionPages, captionPlacement, captionsEnabled, fitFontSize, formatTime, resolveLook, type TextMeasurer } from '@shared/transcript'
 import { Icon } from './Common'
+
+let measureContext: CanvasRenderingContext2D | null = null
+/** Measures caption text with the browser, using the same fonts the preview draws with. */
+const measureInBrowser: TextMeasurer = (text, look, sizePx) => {
+  measureContext ??= document.createElement('canvas').getContext('2d')
+  if (!measureContext) return text.length * sizePx * 0.62
+  measureContext.font = `${look.weight} ${sizePx}px "${look.font}"`
+  return measureContext.measureText(text).width
+}
 
 interface Props {
   src: string
@@ -27,6 +36,11 @@ interface Props {
 export default function FramedPlayer(props: Props) {
   const { src, srcWidth, srcHeight, clip, aspect, tracking, words, captionStyle, captionOptions, onCaptionMove, showSafeZones, maxHeight, maxWidth } = props
   const box = useRef<HTMLDivElement>(null)
+  // Caption fonts load on demand; once they're ready, re-measure so long words are scaled with real widths.
+  const [, setFontsReady] = useState(0)
+  useEffect(() => {
+    void Promise.all(Object.values(CAPTION_LOOKS).map((l) => document.fonts.load(`${l.weight} 16px "${l.font}"`))).then(() => setFontsReady((n) => n + 1))
+  }, [])
   // While a caption is being dragged, the preview follows the pointer; the position is saved when it's released.
   const [drag, setDrag] = useState<{ x: number; y: number; snapped: boolean } | null>(null)
   const video = useRef<HTMLVideoElement>(null)
@@ -142,6 +156,7 @@ export default function FramedPlayer(props: Props) {
             style={captionStyle!}
             options={liveOptions}
             aspect={aspect}
+            boxW={boxW}
             boxH={boxH}
             draggable={Boolean(onCaptionMove)}
             handlers={{ onPointerDown: startDrag, onPointerMove: moveDrag, onPointerUp: endDrag, onPointerCancel: endDrag }}
@@ -180,6 +195,7 @@ function CaptionOverlay({
   style,
   options,
   aspect,
+  boxW,
   boxH,
   draggable,
   handlers
@@ -189,6 +205,7 @@ function CaptionOverlay({
   style: CaptionStyle
   options?: CaptionOptions
   aspect: Aspect
+  boxW: number
   boxH: number
   draggable: boolean
   handlers: Pick<React.HTMLAttributes<HTMLDivElement>, 'onPointerDown' | 'onPointerMove' | 'onPointerUp' | 'onPointerCancel'>
@@ -203,7 +220,18 @@ function CaptionOverlay({
   }
   if (!page) return null
   // Mirrors the ASS built for rendering in src/shared/render.ts.
-  const fontSize = look.size * boxH * (aspect === '16:9' ? 1.15 : 1)
+  const baseSize = look.size * boxH * (aspect === '16:9' ? 1.15 : 1)
+  // A page with a word too wide for the frame is drawn smaller, exactly as the export does.
+  const outlinePx = look.outline * boxH
+  const fontSize = fitFontSize(
+    page.words.map((w) => w.text),
+    look,
+    baseSize,
+    2 * place.halfWidth * boxW - 2 * outlinePx,
+    measureInBrowser,
+    style === 'punch' ? boxW / OUTPUT_SIZE[aspect].width : 0
+  )
+  const shrink = fontSize / baseSize
   const activeIndex = page.words.findIndex((w, i) => time >= (i === 0 ? page!.start : w.start) && time < (page!.words[i + 1]?.start ?? page!.end))
   return (
     <div
@@ -217,8 +245,8 @@ function CaptionOverlay({
         fontFamily: `"${look.font}", sans-serif`,
         fontWeight: look.weight,
         fontSize,
-        WebkitTextStroke: look.outline ? `${look.outline * boxH * 2}px ${look.outlineColor}` : undefined,
-        textShadow: `0 ${look.shadow * boxH}px ${look.shadow * boxH * 2}px rgba(0,0,0,0.7)`
+        WebkitTextStroke: look.outline ? `${look.outline * boxH * 2 * shrink}px ${look.outlineColor}` : undefined,
+        textShadow: `0 ${look.shadow * boxH * shrink}px ${look.shadow * boxH * 2 * shrink}px rgba(0,0,0,0.7)`
       }}
     >
       {page.words.map((w, i) => (

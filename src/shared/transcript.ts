@@ -188,6 +188,25 @@ export function resolveLook(style: CaptionStyle, options?: CaptionOptions): Reso
 
 export const captionsEnabled = (options?: CaptionOptions) => options?.enabled !== false
 
+/** Measures how wide `text` is, in pixels, in a caption font at `sizePx`. */
+export type TextMeasurer = (text: string, look: Pick<CaptionLook, 'font' | 'weight'>, sizePx: number) => number
+
+/**
+ * The font size for one caption page: the normal size, or smaller if its widest word wouldn't fit in `availPx`.
+ * Words are never split, so a long one in a bold style ("RELATIONSHIP" is wider than a phone screen) has to shrink.
+ */
+export function fitFontSize(words: string[], look: CaptionLook, sizePx: number, availPx: number, measure: TextMeasurer, letterSpacingPx = 0): number {
+  let widest = 0
+  for (const w of words) {
+    const text = look.uppercase ? w.toUpperCase() : w
+    widest = Math.max(widest, measure(text, look, sizePx) + letterSpacingPx * text.length)
+  }
+  // A little slack so the outline and rounding never touch the frame edge.
+  const room = availPx * 0.97
+  if (widest <= room) return sizePx
+  return Math.max(sizePx * 0.4, (sizePx * room) / widest)
+}
+
 /** Keep only known, valid caption settings (colors as #RRGGBB, positions clamped). Returns undefined when nothing is set. */
 export function sanitizeCaptionOptions(input: unknown): CaptionOptions | undefined {
   if (!input || typeof input !== 'object') return undefined

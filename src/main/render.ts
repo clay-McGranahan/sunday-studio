@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { RenderRequest } from '@shared/types'
 import { planRender, progressFromLine } from '@shared/render'
+import { createFontMeasurer } from '@shared/fontMeasure.node'
 import { paths } from './paths'
 import { readProject, readTranscript } from './store'
 import { requireFfmpeg, run } from './tools'
@@ -26,6 +27,7 @@ export async function renderClip(req: RenderRequest, onProgress: (p: number) => 
       aspect: req.aspect,
       captionStyle: req.captionStyle,
       captionOptions: req.captionOptions,
+      measure: createFontMeasurer(paths.resource('fonts')),
       tracking: req.tracking,
       outputPath: req.outputPath,
       workDir: work,
