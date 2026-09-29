@@ -25,6 +25,7 @@ export async function renderClip(req: RenderRequest, onProgress: (p: number) => 
       endWord: req.endWord,
       aspect: req.aspect,
       captionStyle: req.captionStyle,
+      captionOptions: req.captionOptions,
       tracking: req.tracking,
       outputPath: req.outputPath,
       workDir: work,

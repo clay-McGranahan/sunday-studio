@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Aspect, CaptionStyle, Tracking, Word } from '@shared/types'
+import type { Aspect, CaptionOptions, CaptionStyle, Tracking, Word } from '@shared/types'
 import { cropAt, OUTPUT_SIZE, SAFE_ZONES } from '@shared/framing'
-import { captionPages, CAPTION_LOOKS, formatTime } from '@shared/transcript'
+import { captionPages, captionPlacement, captionsEnabled, formatTime, resolveLook } from '@shared/transcript'
 import { Icon } from './Common'
 
 interface Props {
@@ -14,6 +14,9 @@ interface Props {
   /** Words in the clip; captions are drawn when a style is given. */
   words?: Word[]
   captionStyle?: CaptionStyle
+  captionOptions?: CaptionOptions
+  /** When given, the captions can be dragged in the preview; called once when the drag ends. */
+  onCaptionMove?: (position: { x: number; y: number }) => void
   showSafeZones?: boolean
   /** Max preview size in CSS pixels. */
   maxHeight: number
@@ -22,7 +25,10 @@ interface Props {
 
 /** Plays the clip in a loop, cropped and tracked exactly as it will render. */
 export default function FramedPlayer(props: Props) {
-  const { src, srcWidth, srcHeight, clip, aspect, tracking, words, captionStyle, showSafeZones, maxHeight, maxWidth } = props
+  const { src, srcWidth, srcHeight, clip, aspect, tracking, words, captionStyle, captionOptions, onCaptionMove, showSafeZones, maxHeight, maxWidth } = props
+  const box = useRef<HTMLDivElement>(null)
+  // While a caption is being dragged, the preview follows the pointer; the position is saved when it's released.
+  const [drag, setDrag] = useState<{ x: number; y: number; snapped: boolean } | null>(null)
   const video = useRef<HTMLVideoElement>(null)
   const [playing, setPlaying] = useState(false)
   const [t, setT] = useState(0) // seconds from clip start
@@ -41,6 +47,31 @@ export default function FramedPlayer(props: Props) {
   const s = boxH / crop.height
 
   const pages = useMemo(() => (words && captionStyle ? captionPages(words, captionStyle) : []), [words, captionStyle])
+  const showCaptions = Boolean(captionStyle) && captionsEnabled(captionOptions)
+  const liveOptions: CaptionOptions | undefined = drag ? { ...captionOptions, x: drag.x, y: drag.y } : captionOptions
+
+  const startDrag = (e: React.PointerEvent) => {
+    if (!onCaptionMove || !box.current) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setDrag({ x: captionPlacement(captionStyle!, aspect, captionOptions).x, y: captionPlacement(captionStyle!, aspect, captionOptions).y, snapped: false })
+  }
+  const moveDrag = (e: React.PointerEvent) => {
+    if (!drag || !box.current) return
+    const r = box.current.getBoundingClientRect()
+    let x = (e.clientX - r.left) / r.width
+    const y = (e.clientY - r.top) / r.height
+    const snapped = Math.abs(x - 0.5) < 0.025
+    if (snapped) x = 0.5
+    setDrag({ x, y, snapped })
+  }
+  const endDrag = () => {
+    if (!drag) return
+    const placed = captionPlacement(captionStyle!, aspect, { x: drag.x, y: drag.y })
+    setDrag(null)
+    onCaptionMove?.({ x: Number(placed.x.toFixed(3)), y: Number(placed.y.toFixed(3)) })
+  }
 
   useEffect(() => {
     const v = video.current
@@ -84,7 +115,7 @@ export default function FramedPlayer(props: Props) {
 
   return (
     <div className="framed" style={{ width: boxW }}>
-      <div className="framed-box" style={{ width: boxW, height: boxH }} onClick={toggle}>
+      <div ref={box} className={`framed-box ${drag ? 'is-dragging' : ''}`} style={{ width: boxW, height: boxH }} onClick={toggle}>
         <video
           ref={video}
           src={src}
@@ -99,7 +130,23 @@ export default function FramedPlayer(props: Props) {
           onSeeked={(e) => setT(Math.max(0, e.currentTarget.currentTime - clip.start))}
           onLoadedMetadata={(e) => (e.currentTarget.currentTime = clip.start)}
         />
-        {captionStyle && <CaptionOverlay pages={pages} time={clip.start + t} style={captionStyle} aspect={aspect} boxH={boxH} />}
+        {drag && (
+          <div className="guides" aria-hidden="true">
+            <i className={`guide-v ${drag.snapped ? 'on' : ''}`} />
+          </div>
+        )}
+        {showCaptions && (
+          <CaptionOverlay
+            pages={pages}
+            time={clip.start + t}
+            style={captionStyle!}
+            options={liveOptions}
+            aspect={aspect}
+            boxH={boxH}
+            draggable={Boolean(onCaptionMove)}
+            handlers={{ onPointerDown: startDrag, onPointerMove: moveDrag, onPointerUp: endDrag, onPointerCancel: endDrag }}
+          />
+        )}
         {showSafeZones && (
           <div className="safe-zones" aria-hidden="true">
             <div style={{ top: 0, left: 0, right: 0, height: `${safe.top * 100}%` }} />
@@ -131,31 +178,46 @@ function CaptionOverlay({
   pages,
   time,
   style,
+  options,
   aspect,
-  boxH
+  boxH,
+  draggable,
+  handlers
 }: {
   pages: ReturnType<typeof captionPages>
   time: number
   style: CaptionStyle
+  options?: CaptionOptions
   aspect: Aspect
   boxH: number
+  draggable: boolean
+  handlers: Pick<React.HTMLAttributes<HTMLDivElement>, 'onPointerDown' | 'onPointerMove' | 'onPointerUp' | 'onPointerCancel'>
 }) {
-  const look = CAPTION_LOOKS[style]
-  const page = pages.find((p) => time >= p.start && time < p.end)
+  const look = resolveLook(style, options)
+  const place = captionPlacement(style, aspect, options)
+  let page = pages.find((p) => time >= p.start && time < p.end)
+  // While positioning, keep the nearest caption on screen so there is always something to grab.
+  if (!page && draggable && pages.length) {
+    const distance = (p: (typeof pages)[number]) => (time < p.start ? p.start - time : time - p.end)
+    page = pages.reduce((best, p) => (distance(p) < distance(best) ? p : best))
+  }
   if (!page) return null
-  // Mirrors the ASS built for rendering in src/main/render.ts.
+  // Mirrors the ASS built for rendering in src/shared/render.ts.
   const fontSize = look.size * boxH * (aspect === '16:9' ? 1.15 : 1)
-  const activeIndex = page.words.findIndex((w, i) => time >= (i === 0 ? page.start : w.start) && time < (page.words[i + 1]?.start ?? page.end))
+  const activeIndex = page.words.findIndex((w, i) => time >= (i === 0 ? page!.start : w.start) && time < (page!.words[i + 1]?.start ?? page!.end))
   return (
     <div
-      className={`caption caption-${style}`}
-      key={page.start}
+      className={`caption caption-${style} ${draggable ? 'caption-draggable' : ''}`}
+      key={draggable ? 'movable' : page.start}
+      {...(draggable ? handlers : {})}
       style={{
-        top: `${look.position[aspect] * 100}%`,
+        left: `${place.x * 100}%`,
+        top: `${place.y * 100}%`,
+        width: `${place.halfWidth * 200}%`,
         fontFamily: `"${look.font}", sans-serif`,
         fontWeight: look.weight,
         fontSize,
-        WebkitTextStroke: look.outline ? `${look.outline * boxH * 2}px #000` : undefined,
+        WebkitTextStroke: look.outline ? `${look.outline * boxH * 2}px ${look.outlineColor}` : undefined,
         textShadow: `0 ${look.shadow * boxH}px ${look.shadow * boxH * 2}px rgba(0,0,0,0.7)`
       }}
     >

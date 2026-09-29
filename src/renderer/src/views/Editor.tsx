@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Aspect, CaptionStyle, Project, Selection, Suggestion, Transcript, Word } from '@shared/types'
+import type { Aspect, CaptionOptions, CaptionStyle, Project, Selection, Suggestion, Transcript, Word } from '@shared/types'
 import { MAX_CLIP_SECONDS } from '@shared/types'
-import { ASPECT_INFO, clipBounds, cropSize } from '@shared/framing'
-import { CAPTION_LOOKS, formatBytes, formatDuration, formatTime } from '@shared/transcript'
+import { ASPECT_INFO, clipBounds, cropSize, SAFE_ZONES } from '@shared/framing'
+import { CAPTION_LOOKS, CAPTION_SWATCHES, captionPlacement, captionsEnabled, formatBytes, formatDuration, formatTime, resolveLook } from '@shared/transcript'
 import { Icon, ProgressBar, Spinner } from '../components/Common'
 import FramedPlayer from '../components/FramedPlayer'
 import PreviewPlayer from '../components/PreviewPlayer'
@@ -165,7 +165,7 @@ export default function Editor({ projectId, onExit, onSettings }: Props) {
     }
   }
 
-  const patchProject = async (patch: Partial<Pick<Project, 'aspect' | 'captionStyle' | 'name'>>) => {
+  const patchProject = async (patch: Partial<Pick<Project, 'aspect' | 'captionStyle' | 'captionOptions' | 'name'>>) => {
     setProject((p) => (p ? { ...p, ...patch } : p))
     await api.updateProject(projectId, patch).catch(toast.error)
   }
@@ -318,6 +318,7 @@ export default function Editor({ projectId, onExit, onSettings }: Props) {
           clipWords={clipWords}
           title={clipTitle}
           onStyle={(captionStyle) => void patchProject({ captionStyle })}
+          onOptions={(captionOptions) => void patchProject({ captionOptions })}
           beforeRender={async () => {
             if (corrections) await saveCorrections()
           }}
@@ -559,6 +560,7 @@ function ExportStep({
   clipWords,
   title,
   onStyle,
+  onOptions,
   beforeRender,
   onBack
 }: {
@@ -568,6 +570,7 @@ function ExportStep({
   clipWords: Word[]
   title: string
   onStyle: (s: CaptionStyle) => void
+  onOptions: (o: CaptionOptions) => void
   beforeRender: () => Promise<void>
   onBack: () => void
 }) {
@@ -579,7 +582,29 @@ function ExportStep({
   const trackValid = project.tracking && project.tracking.start <= bounds.start + 0.5 && project.tracking.end >= bounds.end - 0.5
 
   useEffect(() => api.onProgress((e) => e.kind === 'render' && setProgress(e.progress)), [])
-  useEffect(() => setOutput(null), [project.captionStyle, project.aspect, selection.startWord, selection.endWord])
+  useEffect(() => setOutput(null), [project.captionStyle, JSON.stringify(project.captionOptions), project.aspect, selection.startWord, selection.endWord])
+
+  const options = project.captionOptions ?? {}
+  // Changes build on the latest settings, even if two arrive before the screen re-renders.
+  const latestOptions = useRef<CaptionOptions>(options)
+  latestOptions.current = options
+  const enabled = captionsEnabled(options)
+  const resolved = resolveLook(project.captionStyle, options)
+  const place = captionPlacement(project.captionStyle, project.aspect, options)
+  /** Apply changes; a key set to undefined goes back to the style's own value. */
+  const setOptions = (patch: Partial<Record<keyof CaptionOptions, CaptionOptions[keyof CaptionOptions] | undefined>>) => {
+    const next = { ...latestOptions.current, ...patch } as Record<string, unknown>
+    for (const key of Object.keys(next)) if (next[key] === undefined) delete next[key]
+    latestOptions.current = next as CaptionOptions
+    onOptions(next as CaptionOptions)
+  }
+  const safe = SAFE_ZONES[project.aspect]
+  const presets = [
+    { label: 'Top', y: Math.round((safe.top + 0.07) * 100) / 100 },
+    { label: 'Middle', y: 0.5 },
+    { label: 'Bottom', y: Math.round((1 - safe.bottom - 0.04) * 100) / 100 }
+  ]
+  const moved = options.x !== undefined || options.y !== undefined
 
   const render = async () => {
     setRendering(true)
@@ -593,6 +618,7 @@ function ExportStep({
           endWord: selection.endWord,
           aspect: project.aspect,
           captionStyle: project.captionStyle,
+          captionOptions: project.captionOptions,
           tracking: trackValid ? project.tracking : undefined
         },
         title
@@ -621,6 +647,8 @@ function ExportStep({
             tracking={trackValid ? project.tracking : undefined}
             words={clipWords}
             captionStyle={project.captionStyle}
+            captionOptions={project.captionOptions}
+            onCaptionMove={enabled ? ({ x, y }) => setOptions({ x, y }) : undefined}
             maxHeight={stage.height - 70}
             maxWidth={stage.width - 48}
           />
@@ -628,15 +656,21 @@ function ExportStep({
       </section>
       <aside className="side-col">
         <div className="panel">
-          <h3>Caption style</h3>
-          <div className="style-options">
+          <div className="row between">
+            <h3>Caption style</h3>
+            <label className="toggle">
+              <input type="checkbox" checked={enabled} onChange={(e) => setOptions({ enabled: e.target.checked ? undefined : false })} />
+              <span>Show captions</span>
+            </label>
+          </div>
+          <div className={`style-options ${enabled ? '' : 'is-off'}`}>
             {(Object.keys(CAPTION_LOOKS) as CaptionStyle[]).map((s) => {
-              const look = CAPTION_LOOKS[s]
+              const look = resolveLook(s, options)
               return (
                 <button key={s} className={`style-option ${project.captionStyle === s ? 'active' : ''}`} onClick={() => onStyle(s)}>
                   <span
                     className={`style-sample caption-${s}`}
-                    style={{ fontFamily: `"${look.font}", sans-serif`, fontWeight: look.weight }}
+                    style={{ fontFamily: `"${look.font}", sans-serif`, fontWeight: look.weight, color: look.color, WebkitTextStrokeColor: look.outlineColor }}
                   >
                     {look.uppercase ? 'HE IS ' : 'He is '}
                     <span style={{ color: look.activeColor, opacity: 1 }}>{look.uppercase ? 'FAITHFUL' : 'faithful'}</span>
@@ -650,8 +684,47 @@ function ExportStep({
               )
             })}
           </div>
-          <p className="muted small">Captions are timed word by word and use your corrected transcript.</p>
+          <p className="muted small">
+            {enabled ? 'Captions are timed word by word and use your corrected transcript.' : 'Captions are off: the clip will export without any text on screen.'}
+          </p>
         </div>
+        {enabled && (
+          <div className="panel">
+            <h3>Color and position</h3>
+            <ColorRow
+              label="Text"
+              value={resolved.color}
+              custom={options.color !== undefined}
+              onPick={(color) => setOptions({ color })}
+              onReset={() => setOptions({ color: undefined })}
+            />
+            <ColorRow
+              label="Spoken word"
+              value={resolved.activeColor}
+              custom={options.highlight !== undefined}
+              onPick={(highlight) => setOptions({ highlight })}
+              onReset={() => setOptions({ highlight: undefined })}
+            />
+            <div className="color-row">
+              <span className="color-label">Position</span>
+              <div className="segmented small" role="group" aria-label="Caption position">
+                <button className={!moved ? 'active' : ''} onClick={() => setOptions({ x: undefined, y: undefined })}>
+                  Default
+                </button>
+                {presets.map((p) => (
+                  <button
+                    key={p.label}
+                    className={moved && Math.abs(place.y - p.y) < 0.02 && Math.abs(place.x - 0.5) < 0.02 ? 'active' : ''}
+                    onClick={() => setOptions({ x: 0.5, y: p.y })}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="muted small">You can also drag the captions to any spot in the preview.</p>
+          </div>
+        )}
         <div className="panel export-panel">
           <h3>Export</h3>
           <p className="small muted">
@@ -690,6 +763,50 @@ function ExportStep({
           </button>
         </div>
       </aside>
+    </div>
+  )
+}
+
+/** A row of preset colors plus a custom picker. */
+function ColorRow({
+  label,
+  value,
+  custom,
+  onPick,
+  onReset
+}: {
+  label: string
+  value: string
+  custom: boolean
+  onPick: (hex: string) => void
+  onReset: () => void
+}) {
+  return (
+    <div className="color-row">
+      <span className="color-label">
+        {label}
+        {custom && (
+          <button className="link-btn" onClick={onReset}>
+            Reset
+          </button>
+        )}
+      </span>
+      <div className="swatches" role="group" aria-label={`${label} color`}>
+        {CAPTION_SWATCHES.map((s) => (
+          <button
+            key={s.hex}
+            className={`swatch ${value.toUpperCase() === s.hex ? 'active' : ''}`}
+            style={{ background: s.hex }}
+            title={s.name}
+            aria-label={s.name}
+            aria-pressed={value.toUpperCase() === s.hex}
+            onClick={() => onPick(s.hex)}
+          />
+        ))}
+        <label className={`swatch swatch-custom ${CAPTION_SWATCHES.every((s) => s.hex !== value.toUpperCase()) ? 'active' : ''}`} title="Custom color">
+          <input type="color" value={value} onChange={(e) => onPick(e.target.value.toUpperCase())} aria-label={`Custom ${label.toLowerCase()} color`} />
+        </label>
+      </div>
     </div>
   )
 }

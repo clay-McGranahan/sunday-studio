@@ -1,4 +1,4 @@
-import type { CaptionStyle, Word } from './types'
+import type { Aspect, CaptionOptions, CaptionStyle, Word } from './types'
 
 export interface Span {
   startWord: number
@@ -150,6 +150,73 @@ export const CAPTION_LOOKS: Record<CaptionStyle, CaptionLook> = {
     shadow: 0.002,
     position: { '9:16': 0.74, '1:1': 0.86, '16:9': 0.88 }
   }
+}
+
+export const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+
+/** Ready-made caption colors; the custom picker covers everything else. */
+export const CAPTION_SWATCHES: { name: string; hex: string }[] = [
+  { name: 'White', hex: '#FFFFFF' },
+  { name: 'Yellow', hex: '#FFD84D' },
+  { name: 'Orange', hex: '#FF9F43' },
+  { name: 'Coral', hex: '#FF6B6B' },
+  { name: 'Pink', hex: '#FF8FCB' },
+  { name: 'Sky', hex: '#6EC1FF' },
+  { name: 'Mint', hex: '#5EE3A1' },
+  { name: 'Black', hex: '#111111' }
+]
+
+export type ResolvedLook = CaptionLook & { outlineColor: string }
+
+const luminance = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16)
+  return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255
+}
+
+/**
+ * The style's look with the user's color choices applied (invalid colors are ignored). The outline flips to
+ * white for dark text so it stays readable, and a style with no highlight of its own follows the text color.
+ */
+export function resolveLook(style: CaptionStyle, options?: CaptionOptions): ResolvedLook {
+  const look = CAPTION_LOOKS[style]
+  const color = options?.color && HEX_COLOR.test(options.color) ? options.color.toUpperCase() : look.color
+  const ownHighlight = look.activeColor !== look.color
+  const highlight = options?.highlight && HEX_COLOR.test(options.highlight) ? options.highlight.toUpperCase() : undefined
+  const activeColor = highlight ?? (ownHighlight ? look.activeColor : color)
+  return { ...look, color, activeColor, outlineColor: luminance(color) < 0.35 ? '#FFFFFF' : '#000000' }
+}
+
+export const captionsEnabled = (options?: CaptionOptions) => options?.enabled !== false
+
+/** Keep only known, valid caption settings (colors as #RRGGBB, positions clamped). Returns undefined when nothing is set. */
+export function sanitizeCaptionOptions(input: unknown): CaptionOptions | undefined {
+  if (!input || typeof input !== 'object') return undefined
+  const raw = input as Record<string, unknown>
+  const out: CaptionOptions = {}
+  if (raw.enabled === false) out.enabled = false
+  if (typeof raw.color === 'string' && HEX_COLOR.test(raw.color)) out.color = raw.color.toUpperCase()
+  if (typeof raw.highlight === 'string' && HEX_COLOR.test(raw.highlight)) out.highlight = raw.highlight.toUpperCase()
+  if (typeof raw.x === 'number' && Number.isFinite(raw.x)) out.x = Math.min(0.82, Math.max(0.18, raw.x))
+  if (typeof raw.y === 'number' && Number.isFinite(raw.y)) out.y = Math.min(0.95, Math.max(0.06, raw.y))
+  return Object.keys(out).length ? out : undefined
+}
+
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
+
+export interface CaptionPlacement {
+  /** Center of the caption as a fraction of the frame. */
+  x: number
+  y: number
+  /** Half the width available for text, as a fraction of the frame width (keeps moved captions on screen). */
+  halfWidth: number
+}
+
+/** Where captions sit: the user's position if set, otherwise the style's default for this shape. */
+export function captionPlacement(style: CaptionStyle, aspect: Aspect, options?: CaptionOptions): CaptionPlacement {
+  const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n)
+  const x = clamp(finite(options?.x) ? options.x : 0.5, 0.18, 0.82)
+  const y = clamp(finite(options?.y) ? options.y : CAPTION_LOOKS[style].position[aspect], 0.06, 0.95)
+  return { x, y, halfWidth: Math.max(0.14, Math.min(0.42, Math.min(x, 1 - x) - 0.02)) }
 }
 
 /** Break a clip's words into on-screen caption pages, timed to the speech. */

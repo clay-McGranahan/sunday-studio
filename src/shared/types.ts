@@ -38,6 +38,19 @@ export interface Suggestion {
 export type Aspect = '9:16' | '1:1' | '16:9'
 export type CaptionStyle = 'clean' | 'punch' | 'minimal'
 
+/** Per-clip caption tweaks on top of the chosen style. Anything unset keeps the style's own look. */
+export interface CaptionOptions {
+  /** false = no captions at all. */
+  enabled?: boolean
+  /** Text color, #RRGGBB. */
+  color?: string
+  /** Color of the word being spoken, #RRGGBB. */
+  highlight?: string
+  /** Where the caption's center sits, as a fraction (0–1) of the video frame. */
+  x?: number
+  y?: number
+}
+
 /** Horizontal/vertical centre of the crop window over time, normalised 0–1 of the source frame. */
 export interface TrackPoint {
   t: number
@@ -74,6 +87,7 @@ export interface Project {
   selection?: Selection
   aspect: Aspect
   captionStyle: CaptionStyle
+  captionOptions?: CaptionOptions
   tracking?: Tracking
 }
 
@@ -126,6 +140,7 @@ export interface RenderRequest {
   endWord: number
   aspect: Aspect
   captionStyle: CaptionStyle
+  captionOptions?: CaptionOptions
   tracking?: Tracking
   outputPath: string
 }

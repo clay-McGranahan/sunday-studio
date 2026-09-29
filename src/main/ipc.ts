@@ -6,6 +6,7 @@ import { testConnection, suggestClips } from './ai'
 import { cancelProcessing, createProject, isProcessing, processProject } from './pipeline'
 import { renderClip } from './render'
 import { clipBounds } from '@shared/framing'
+import { sanitizeCaptionOptions } from '@shared/transcript'
 import { getAiSettings, setAiSettings } from './settings'
 import { getSetupStatus, installSetupItem } from './setup'
 import { deleteProject, getProjectDetail, listProjects, readTranscript, updateProject, writeTranscript } from './store'
@@ -27,7 +28,7 @@ function handle<A extends unknown[], R>(channel: string, fn: (...args: A) => Pro
 }
 
 // Only these fields may be changed directly from the UI.
-type ProjectPatch = Pick<Partial<Project>, 'name' | 'selection' | 'aspect' | 'captionStyle' | 'tracking'>
+type ProjectPatch = Pick<Partial<Project>, 'name' | 'selection' | 'aspect' | 'captionStyle' | 'captionOptions' | 'tracking'>
 
 let renderAbort: AbortController | null = null
 
@@ -56,9 +57,10 @@ export function registerIpc(): void {
   handle('projects:cancel', (id: string) => cancelProcessing(id))
   handle('projects:update', (id: string, patch: ProjectPatch) => {
     const allowed: ProjectPatch = {}
-    for (const key of ['name', 'selection', 'aspect', 'captionStyle', 'tracking'] as const) {
+    for (const key of ['name', 'selection', 'aspect', 'captionStyle', 'captionOptions', 'tracking'] as const) {
       if (key in patch) (allowed as Record<string, unknown>)[key] = patch[key]
     }
+    if ('captionOptions' in patch) allowed.captionOptions = sanitizeCaptionOptions(patch.captionOptions)
     return updateProject(id, allowed)
   })
   handle('suggestions:remove', (id: string, suggestionId: string) => {

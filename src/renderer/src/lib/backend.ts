@@ -10,7 +10,7 @@ export interface RenderResult {
   url?: string
 }
 
-export type ProjectPatch = Partial<Pick<Project, 'name' | 'selection' | 'aspect' | 'captionStyle' | 'tracking'>>
+export type ProjectPatch = Partial<Pick<Project, 'name' | 'selection' | 'aspect' | 'captionStyle' | 'captionOptions' | 'tracking'>>
 export type ProjectRow = Project & { processing?: boolean }
 
 /**
