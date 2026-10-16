@@ -7,7 +7,7 @@ Desktop app that turns full-length sermon recordings into short, captioned clips
 ```bash
 npm install
 npm run dev        # builds the speaker tracker, then starts the app with hot reload
-npm run dist       # packaged macOS .dmg (electron-builder)
+npm run dist:unsigned   # local test .dmg, not signed (Gatekeeper will block it on other Macs)
 ```
 
 On first launch, the welcome screen checks for and installs what's missing:
@@ -21,6 +21,22 @@ On first launch, the welcome screen checks for and installs what's missing:
 | Speaker tracker | Swift + Apple Vision person/face detection | `resources/bin/sunday-tracker` |
 
 AI clip suggestions are optional and use any OpenAI-compatible API (OpenRouter by default; OpenAI, or a custom base URL such as a local llama.cpp / Ollama server). The API key is stored encrypted with the macOS keychain via Electron `safeStorage`.
+
+### Releasing
+
+Public builds must be signed with a **Developer ID Application** certificate and notarized, or Gatekeeper blocks them. Build outside iCloud Drive: iCloud tags files in `~/Documents` with Finder metadata that `codesign` rejects. With the certificate in your keychain, store notary credentials once, then build and notarize the app and the DMG:
+
+```bash
+xcrun notarytool store-credentials sunday-notary --apple-id <you@example.com> --team-id <TEAMID>
+
+OUT=~/Library/Caches/sunday-studio-release
+APPLE_KEYCHAIN_PROFILE=sunday-notary npm run dist -- -c.directories.output=$OUT   # signs + notarizes the app
+xcrun notarytool submit $OUT/Sunday-Studio-arm64.dmg --keychain-profile sunday-notary --wait
+xcrun stapler staple $OUT/Sunday-Studio-arm64.dmg
+spctl -a -vvv -t open --context context:primary-signature $OUT/Sunday-Studio-arm64.dmg   # expect "accepted"
+```
+
+Upload `Sunday-Studio-arm64.dmg` to a GitHub release; the website links to `releases/latest/download/Sunday-Studio-arm64.dmg`.
 
 ## How it fits together
 

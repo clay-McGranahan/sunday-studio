@@ -493,6 +493,8 @@ input:focus {
   width: min(620px, 100%);
   padding: 44px 48px 36px;
   display: grid;
+  /* An implicit auto column grows to fit unbreakable text (long tool paths); pin it to the card. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 22px;
 }
 .welcome-head {
@@ -543,6 +545,7 @@ input:focus {
 
 .setup-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 .setup-item {
   display: flex;

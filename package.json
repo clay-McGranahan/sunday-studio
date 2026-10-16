@@ -12,9 +12,10 @@
     "build:tracker": "node scripts/build-tracker.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "start": "electron-vite preview",
-    "dist": "npm run build && electron-builder --mac",
-    "dist:unsigned": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish never -c.mac.identity=null",
-    "sign": "node scripts/sign-dev.mjs"
+    "dist": "npm run build:release && electron-builder --mac --arm64 --publish never",
+    "dist:unsigned": "npm run build:release && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --arm64 --publish never -c.mac.identity=null -c.mac.notarize=false",
+    "sign": "node scripts/sign-dev.mjs",
+    "build:release": "node scripts/build-tracker.mjs --force && electron-vite build"
   },
   "dependencies": {
     "@fontsource-variable/instrument-sans": "^5.3.0",
@@ -58,11 +59,33 @@
     "mac": {
       "category": "public.app-category.video",
       "target": [
-        "dmg"
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
       ],
+      "minimumSystemVersion": "13.5",
+      "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true,
       "extendInfo": {
         "NSLocalNetworkUsageDescription": "Sunday Studio connects to AI servers on your local network (such as llama.cpp or Ollama) for clip suggestions."
       }
+    },
+    "copyright": "Copyright © 2026 Clay McGranahan",
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "dmg": {
+      "artifactName": "Sunday-Studio-arm64.${ext}",
+      "title": "Sunday Studio",
+      "sign": true
     }
   }
 }

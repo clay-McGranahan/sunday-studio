@@ -164,7 +164,7 @@ export async function installSetupItem(id: SetupItemId, emit: Emit): Promise<voi
       const outDir = join(paths.data(), 'bin')
       mkdirSync(outDir, { recursive: true })
       await check(
-        run(swiftc, ['-O', '-swift-version', '5', paths.resource('swift', 'Tracker.swift'), '-o', join(outDir, 'sunday-tracker')]),
+        run(swiftc, ['-O', '-swift-version', '5', '-target', 'arm64-apple-macos13.5', paths.resource('swift', 'Tracker.swift'), '-o', join(outDir, 'sunday-tracker')]),
         'Building the tracker'
       )
       return

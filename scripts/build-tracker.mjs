@@ -5,6 +5,11 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
+// Without an explicit target, swiftc targets the build machine's macOS version,
+// and the helpers would refuse to launch on anything older. Keep in sync with
+// build.mac.minimumSystemVersion in package.json (MLX needs 13.5).
+const target = 'arm64-apple-macos13.5'
+const force = process.argv.includes('--force')
 
 if (process.platform !== 'darwin') {
   console.log('Skipping native helper build (macOS only).')
@@ -24,10 +29,10 @@ let fresh = true
 for (const t of targets) {
   const source = join(root, 'resources', 'swift', t.source)
   const output = join(root, 'resources', 'bin', t.output)
-  if (existsSync(output) && statSync(output).mtimeMs >= statSync(source).mtimeMs) continue
+  if (!force && existsSync(output) && statSync(output).mtimeMs >= statSync(source).mtimeMs) continue
   fresh = false
   try {
-    execFileSync('swiftc', ['-O', '-swift-version', '5', source, '-o', output], { stdio: 'inherit' })
+    execFileSync('swiftc', ['-O', '-swift-version', '5', '-target', target, source, '-o', output], { stdio: 'inherit' })
     console.log(`Built ${t.label}.`)
   } catch {
     console.warn(`Could not build the ${t.label} (is Xcode Command Line Tools installed?).`)
